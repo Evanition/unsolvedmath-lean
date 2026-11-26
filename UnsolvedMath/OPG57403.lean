@@ -1,10 +1,9 @@
 namespace UnsolvedMath
 namespace OPG57403
 
-universe u v w
+universe u v w z
 
 /-- A (possibly improper) reloid from `A` to `B`: a filter on `A × B`. -/
-@[ext]
 structure Reloid (A : Type u) (B : Type v) where
   sets : (A × B → Prop) → Prop
   univ_mem : sets (fun _ => True)
@@ -15,8 +14,13 @@ namespace Reloid
 
 theorem ext_sets {A : Type u} {B : Type v} {f g : Reloid A B}
     (h : ∀ U, f.sets U ↔ g.sets U) : f = g := by
-  ext U
-  exact h U
+  cases f with
+  | mk fsets funiv finter fmono =>
+    cases g with
+    | mk gsets guniv ginter gmono =>
+      have hsets : fsets = gsets := funext fun U => propext (h U)
+      subst hsets
+      rfl
 
 /-- Filter order on reloids (reverse inclusion of filter sets). -/
 instance {A : Type u} {B : Type v} : LE (Reloid A B) where
@@ -61,14 +65,15 @@ def principal {A : Type u} {B : Type v} (R : A × B → Prop) : Reloid A B where
 def inf {A : Type u} {B : Type v} (f g : Reloid A B) : Reloid A B where
   sets W := ∃ U V, f.sets U ∧ g.sets V ∧ ∀ p, U p ∧ V p → W p
   univ_mem := ⟨fun _ => True, fun _ => True, f.univ_mem, g.univ_mem, fun _ _ => trivial⟩
-  inter_mem := by
-    rintro W₁ W₂ ⟨U₁, V₁, hU₁, hV₁, h₁⟩ ⟨U₂, V₂, hU₂, hV₂, h₂⟩
-    exact ⟨fun p => U₁ p ∧ U₂ p, fun p => V₁ p ∧ V₂ p,
+  inter_mem := fun {_ _} h₁ h₂ =>
+    let ⟨U₁, V₁, hU₁, hV₁, hW₁⟩ := h₁
+    let ⟨U₂, V₂, hU₂, hV₂, hW₂⟩ := h₂
+    ⟨fun p => U₁ p ∧ U₂ p, fun p => V₁ p ∧ V₂ p,
       f.inter_mem hU₁ hU₂, g.inter_mem hV₁ hV₂,
-      fun p ⟨⟨hu₁, hu₂⟩, ⟨hv₁, hv₂⟩⟩ => ⟨h₁ p ⟨hu₁, hv₁⟩, h₂ p ⟨hu₂, hv₂⟩⟩⟩
-  mono := by
-    rintro W₁ W₂ hW ⟨U, V, hU, hV, h⟩
-    exact ⟨U, V, hU, hV, fun p hp => hW p (h p hp)⟩
+      fun p hp => ⟨hW₁ p ⟨hp.1.1, hp.2.1⟩, hW₂ p ⟨hp.1.2, hp.2.2⟩⟩⟩
+  mono := fun {_ _} hW h₁ =>
+    let ⟨U, V, hU, hV, h⟩ := h₁
+    ⟨U, V, hU, hV, fun p hp => hW p (h p hp)⟩
 
 /-- Filter closure of a family of reloids `G` for arbitrary meets `sInf`. -/
 inductive GenSets {A : Type u} {B : Type v} (G : Reloid A B → Prop) : (A × B → Prop) → Prop
@@ -84,9 +89,15 @@ def sInf {A : Type u} {B : Type v} (G : Reloid A B → Prop) : Reloid A B where
   inter_mem := GenSets.inter
   mono := GenSets.mono
 
+/- Opt-in notation namespace to avoid collisions with Mathlib lattice notations. -/
+namespace Notation
 scoped notation "⊥" => Reloid.bot
 scoped notation "⊤" => Reloid.top
 scoped infixl:68 " ⊓ " => Reloid.inf
+end Notation
+
+section
+open scoped Notation
 
 theorem bot_le {A : Type u} {B : Type v} (f : Reloid A B) : (⊥ : Reloid A B) ≤ f :=
   fun _ _ => trivial
@@ -108,7 +119,7 @@ theorem eq_bot_iff {A : Type u} {B : Type v} (f : Reloid A B) :
 theorem principal_false {A : Type u} {B : Type v} :
     principal (fun _ : A × B => False) = (⊥ : Reloid A B) := by
   rw [eq_bot_iff]
-  intro p hp
+  intro _ hp
   exact hp
 
 theorem le_principal_iff {A : Type u} {B : Type v} {f : Reloid A B} {R : A × B → Prop} :
@@ -126,9 +137,19 @@ theorem inf_le_right {A : Type u} {B : Type v} (f g : Reloid A B) : f ⊓ g ≤ 
   fun V hV => ⟨fun _ => True, V, f.univ_mem, hV, fun _ hp => hp.2⟩
 
 theorem le_inf {A : Type u} {B : Type v} {k f g : Reloid A B}
-    (hkf : k ≤ f) (hkg : k ≤ g) : k ≤ f ⊓ g := by
-  rintro W ⟨U, V, hU, hV, hUV⟩
-  exact k.mono hUV (k.inter_mem (hkf U hU) (hkg V hV))
+    (hkf : k ≤ f) (hkg : k ≤ g) : k ≤ f ⊓ g :=
+  fun _ h =>
+    let ⟨U, V, hU, hV, hUV⟩ := h
+    k.mono hUV (k.inter_mem (hkf U hU) (hkg V hV))
+
+theorem principal_inf {A : Type u} {B : Type v} (R S : A × B → Prop) :
+    principal R ⊓ principal S = principal (fun p => R p ∧ S p) := by
+  apply le_antisymm
+  · intro W hW
+    exact ⟨R, S, fun _ h => h, fun _ h => h, hW⟩
+  · intro W hW
+    let ⟨U, V, hU, hV, hUV⟩ := hW
+    exact fun p hp => hUV p ⟨hU p hp.1, hV p hp.2⟩
 
 theorem sInf_le {A : Type u} {B : Type v} {G : Reloid A B → Prop} {g : Reloid A B}
     (hg : G g) : sInf G ≤ g :=
@@ -143,14 +164,23 @@ theorem le_sInf {A : Type u} {B : Type v} {G : Reloid A B → Prop} {k : Reloid 
   | inter _ _ ihU ihV => exact k.inter_mem ihU ihV
   | mono hUV _ ihU => exact k.mono hUV ihU
 
+theorem sInf_empty {A : Type u} {B : Type v} :
+    sInf (fun _ : Reloid A B => False) = (⊤ : Reloid A B) :=
+  le_antisymm (le_top _) (le_sInf fun _ h => False.elim h)
+
 theorem sInf_pair {A : Type u} {B : Type v} (g h : Reloid A B) :
     sInf (fun k => k = g ∨ k = h) = g ⊓ h := by
   apply le_antisymm
   · exact le_inf (sInf_le (Or.inl rfl)) (sInf_le (Or.inr rfl))
   · apply le_sInf
-    rintro k (rfl | rfl)
-    · exact inf_le_left _ _
-    · exact inf_le_right _ _
+    intro k hk
+    cases hk with
+    | inl hkg =>
+      rw [hkg]
+      exact inf_le_left _ _
+    | inr hkh =>
+      rw [hkh]
+      exact inf_le_right _ _
 
 /-- Relational composition: `relComp S R (x, z)` holds iff `∃ y, R (x, y) ∧ S (y, z)`. -/
 def relComp {A : Type u} {B : Type v} {C : Type w}
@@ -162,21 +192,89 @@ def comp {A : Type u} {B : Type v} {C : Type w}
     (g : Reloid B C) (f : Reloid A B) : Reloid A C where
   sets W := ∃ R S, f.sets R ∧ g.sets S ∧ ∀ p, relComp S R p → W p
   univ_mem := ⟨fun _ => True, fun _ => True, f.univ_mem, g.univ_mem, fun _ _ => trivial⟩
-  inter_mem := by
-    rintro W₁ W₂ ⟨R₁, S₁, hR₁, hS₁, h₁⟩ ⟨R₂, S₂, hR₂, hS₂, h₂⟩
-    refine ⟨fun p => R₁ p ∧ R₂ p, fun q => S₁ q ∧ S₂ q,
-      f.inter_mem hR₁ hR₂, g.inter_mem hS₁ hS₂, ?_⟩
-    rintro ⟨x, z⟩ ⟨y, ⟨hr₁, hr₂⟩, ⟨hs₁, hs₂⟩⟩
-    exact ⟨h₁ (x, z) ⟨y, hr₁, hs₁⟩, h₂ (x, z) ⟨y, hr₂, hs₂⟩⟩
-  mono := by
-    rintro W₁ W₂ hW ⟨R, S, hR, hS, h⟩
-    exact ⟨R, S, hR, hS, fun p hp => hW p (h p hp)⟩
+  inter_mem := fun {_ _} h₁ h₂ =>
+    let ⟨R₁, S₁, hR₁, hS₁, hW₁⟩ := h₁
+    let ⟨R₂, S₂, hR₂, hS₂, hW₂⟩ := h₂
+    ⟨fun p => R₁ p ∧ R₂ p, fun q => S₁ q ∧ S₂ q,
+      f.inter_mem hR₁ hR₂, g.inter_mem hS₁ hS₂,
+      fun p hp =>
+        let ⟨y, hr, hs⟩ := hp
+        ⟨hW₁ p ⟨y, hr.1, hs.1⟩, hW₂ p ⟨y, hr.2, hs.2⟩⟩⟩
+  mono := fun {_ _} hW h₁ =>
+    let ⟨R, S, hR, hS, h⟩ := h₁
+    ⟨R, S, hR, hS, fun p hp => hW p (h p hp)⟩
 
 theorem comp_mono {A : Type u} {B : Type v} {C : Type w}
     {f₁ f₂ : Reloid A B} {g₁ g₂ : Reloid B C}
-    (hg : g₁ ≤ g₂) (hf : f₁ ≤ f₂) : comp g₁ f₁ ≤ comp g₂ f₂ := by
-  rintro W ⟨R, S, hR, hS, hW⟩
-  exact ⟨R, S, hf R hR, hg S hS, hW⟩
+    (hg : g₁ ≤ g₂) (hf : f₁ ≤ f₂) : comp g₁ f₁ ≤ comp g₂ f₂ :=
+  fun _ h =>
+    let ⟨R, S, hR, hS, hW⟩ := h
+    ⟨R, S, hf R hR, hg S hS, hW⟩
+
+theorem comp_principal {A : Type u} {B : Type v} {C : Type w}
+    (S : B × C → Prop) (R : A × B → Prop) :
+    comp (principal S) (principal R) = principal (relComp S R) := by
+  apply le_antisymm
+  · intro W hW
+    exact ⟨R, S, fun _ h => h, fun _ h => h, hW⟩
+  · intro W hW
+    let ⟨R', S', hR', hS', hsub⟩ := hW
+    intro p hp
+    let ⟨y, hr, hs⟩ := hp
+    exact hsub p ⟨y, hR' (p.1, y) hr, hS' (y, p.2) hs⟩
+
+theorem comp_principal_diag_left {A : Type u} {B : Type v} (f : Reloid A B) :
+    comp (principal (fun p : B × B => p.1 = p.2)) f = f := by
+  apply le_antisymm
+  · intro W hW
+    refine ⟨W, fun p : B × B => p.1 = p.2, hW, fun _ hp => hp, ?_⟩
+    intro p hp
+    cases p with
+    | mk x z =>
+      let ⟨y, hr, heq⟩ := hp
+      have heq' : y = z := heq
+      rw [← heq']
+      exact hr
+  · intro W hW
+    let ⟨R, S, hR, hS, hsub⟩ := hW
+    exact f.mono (fun p hp => hsub p ⟨p.2, hp, hS (p.2, p.2) rfl⟩) hR
+
+theorem comp_principal_diag_right {A : Type u} {B : Type v} (f : Reloid A B) :
+    comp f (principal (fun p : A × A => p.1 = p.2)) = f := by
+  apply le_antisymm
+  · intro W hW
+    refine ⟨fun p : A × A => p.1 = p.2, W, fun _ hp => hp, hW, ?_⟩
+    intro p hp
+    cases p with
+    | mk x z =>
+      let ⟨y, heq, hs⟩ := hp
+      have heq' : x = y := heq
+      rw [heq']
+      exact hs
+  · intro W hW
+    let ⟨R, S, hR, hS, hsub⟩ := hW
+    exact f.mono (fun p hp => hsub p ⟨p.1, hR (p.1, p.1) rfl, hp⟩) hS
+
+theorem comp_assoc {A : Type u} {B : Type v} {C : Type w} {D : Type z}
+    (h : Reloid C D) (g : Reloid B C) (f : Reloid A B) :
+    comp h (comp g f) = comp (comp h g) f := by
+  apply le_antisymm
+  · intro W hW
+    let ⟨R, T, hR, hT, hsub⟩ := hW
+    let ⟨S, Q, hS, hQ, hTsub⟩ := hT
+    refine ⟨relComp S R, Q, ⟨R, S, hR, hS, fun _ hp => hp⟩, hQ, ?_⟩
+    intro p hp
+    let ⟨c, hbc, hcd⟩ := hp
+    let ⟨b, hab, hbc'⟩ := hbc
+    exact hsub p ⟨b, hab, hTsub (b, p.2) ⟨c, hbc', hcd⟩⟩
+  · intro W hW
+    let ⟨U, Q, hU, hQ, hsub⟩ := hW
+    let ⟨R, S, hR, hS, hUsub⟩ := hU
+    refine ⟨R, relComp Q S, hR, ⟨S, Q, hS, hQ, fun _ hp => hp⟩, ?_⟩
+    intro p hp
+    let ⟨b, hab, hbd⟩ := hp
+    let ⟨c, hbc, hcd⟩ := hbd
+    exact hsub p ⟨c, hUsub (p.1, c) ⟨b, hab, hbc⟩, hcd⟩
 
 /-- Relational converse. -/
 def relInv {A : Type u} {B : Type v} (R : A × B → Prop) : B × A → Prop :=
@@ -189,17 +287,33 @@ def inv {A : Type u} {B : Type v} (f : Reloid A B) : Reloid B A where
   inter_mem hU hV := f.inter_mem hU hV
   mono hUV hU := f.mono (fun p hp => hUV (p.2, p.1) hp) hU
 
+end
 end Reloid
 
+section
 open Reloid
+open scoped Reloid.Notation
 
 /-- A relation `R : A × B → Prop` is monovalued (functional / partial function). -/
 def RelMonovalued {A : Type u} {B : Type v} (R : A × B → Prop) : Prop :=
   ∀ x y₁ y₂, R (x, y₁) → R (x, y₂) → y₁ = y₂
 
+/-- Constructive (double-negation) monovaluedness of a relation. -/
+def RelMonovaluedDN {A : Type u} {B : Type v} (R : A × B → Prop) : Prop :=
+  ∀ x y₁ y₂, R (x, y₁) → R (x, y₂) → ¬¬(y₁ = y₂)
+
 /-- A reloid `f` is monovalued iff it contains a monovalued relation. -/
 def Monovalued {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
   ∃ R, f.sets R ∧ RelMonovalued R
+
+/-- Constructive double-negation variant of `Monovalued`. -/
+def MonovaluedDN {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
+  ∃ R, f.sets R ∧ RelMonovaluedDN R
+
+theorem monovalued_of_monovaluedDN {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : MonovaluedDN f) : Monovalued f :=
+  let ⟨R, hRf, hRdn⟩ := hf
+  ⟨R, hRf, fun x y₁ y₂ h₁ h₂ => Classical.byContradiction (hRdn x y₁ y₂ h₁ h₂)⟩
 
 /-- Diagonal relation on `B`. -/
 def diag (B : Type v) : B × B → Prop :=
@@ -209,46 +323,71 @@ def diag (B : Type v) : B × B → Prop :=
 def antiDiag (B : Type v) : B × B → Prop :=
   fun p => p.1 ≠ p.2
 
-/-- Sanity check: `Monovalued f` is constructively equivalent to `f ∘ f⁻¹ ≤ id_B`. -/
+/-- `Monovalued f` is constructively equivalent to Porton's `f ∘ f⁻¹ ≤ id_B`. -/
 theorem monovalued_iff_comp_inv_le_diag {A : Type u} {B : Type v} (f : Reloid A B) :
     Monovalued f ↔ comp f (inv f) ≤ principal (diag B) := by
   constructor
-  · rintro ⟨R, hRf, hRmono⟩ W hW
+  · intro hf W hW
+    let ⟨R, hRf, hRmono⟩ := hf
     refine ⟨relInv R, R, hRf, hRf, ?_⟩
-    rintro ⟨y₁, y₂⟩ ⟨x, hx₁, hx₂⟩
-    exact hW (y₁, y₂) (hRmono x y₁ y₂ hx₁ hx₂)
+    intro p hp
+    cases p with
+    | mk y₁ y₂ =>
+      let ⟨x, hx₁, hx₂⟩ := hp
+      exact hW (y₁, y₂) (hRmono x y₁ y₂ hx₁ hx₂)
   · intro hle
-    rcases hle (diag B) (fun _ hp => hp) with ⟨R₁, R₂, hR₁, hR₂, hdiag⟩
+    let ⟨R₁, R₂, hR₁, hR₂, hdiag⟩ := hle (diag B) (fun _ hp => hp)
     refine ⟨fun p => relInv R₁ p ∧ R₂ p, f.inter_mem hR₁ hR₂, ?_⟩
-    intro x y₁ y₂ ⟨h₁, _⟩ ⟨_, h₂⟩
-    exact hdiag (y₁, y₂) ⟨x, h₁, h₂⟩
+    intro x y₁ y₂ h₁ h₂
+    exact hdiag (y₁, y₂) ⟨x, h₁.1, h₂.2⟩
 
-/-- A reloid `f` is metamonovalued iff composition with `f` on the right preserves
-    arbitrary nonempty meets `sInf`. -/
+/-- A reloid `f` is metamonovalued (with respect to codomain universe `w`) iff
+    right-composition with `f` preserves arbitrary nonempty meets `sInf`.
+    (Nonemptiness of `G` is required for Porton's converse `Monovalued → Metamonovalued`;
+    see `exists_proper_monovalued_not_unrestricted_metamonovalued` below.) -/
 def Metamonovalued {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
-  ∀ (C : Type v) (G : Reloid B C → Prop), (∃ g₀, G g₀) →
+  ∀ (C : Type w) (G : Reloid B C → Prop), (∃ g₀, G g₀) →
     comp (sInf G) f = sInf (fun k => ∃ g, G g ∧ k = comp g f)
 
-/-- A reloid `f` is weakly metamonovalued iff composition with `f` on the right
-    preserves binary meets. -/
+/-- Unrestricted variant of `Metamonovalued` allowing `G = ∅`. -/
+def UnrestrictedMetamonovalued {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
+  ∀ (C : Type w) (G : Reloid B C → Prop),
+    comp (sInf G) f = sInf (fun k => ∃ g, G g ∧ k = comp g f)
+
+/-- A reloid `f` is weakly metamonovalued (at universe `w`) iff
+    right-composition with `f` preserves binary meets. -/
 def WeaklyMetamonovalued {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
-  ∀ (C : Type v) (g h : Reloid B C), comp (g ⊓ h) f = comp g f ⊓ comp h f
+  ∀ (C : Type w) (g h : Reloid B C), comp (g ⊓ h) f = comp g f ⊓ comp h f
 
-/-- Variant of weak metamonovaluedness restricted to proper (`≠ ⊥`) reloids. -/
+/-- Weak metamonovaluedness restricted to proper (`≠ ⊥`) operands. -/
 def ProperWeaklyMetamonovalued {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
-  ∀ (C : Type v) (g h : Reloid B C), g ≠ ⊥ → h ≠ ⊥ → comp (g ⊓ h) f = comp g f ⊓ comp h f
+  ∀ (C : Type w) (g h : Reloid B C), g ≠ ⊥ → h ≠ ⊥ → comp (g ⊓ h) f = comp g f ⊓ comp h f
 
-/-- Porton's converse: every monovalued reloid is metamonovalued.
-    This also validates the composition order `comp g f` (`g ∘ f`). -/
+/-- Weak metamonovaluedness restricted to pairs whose meet is proper (`g ⊓ h ≠ ⊥`),
+    which implies `g ≠ ⊥` and `h ≠ ⊥` and remains entirely inside proper reloids. -/
+def ProperMeetWeaklyMetamonovalued {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
+  ∀ (C : Type w) (g h : Reloid B C), g ⊓ h ≠ ⊥ → comp (g ⊓ h) f = comp g f ⊓ comp h f
+
+/-- Sharpest binary-meet hypothesis: only principal endoreloids on `B × B`. -/
+def PrincipalEndoWeaklyMetamonovalued {A : Type u} {B : Type v} (f : Reloid A B) : Prop :=
+  ∀ (R S : B × B → Prop),
+    comp (principal R ⊓ principal S) f = comp (principal R) f ⊓ comp (principal S) f
+
+/-- Porton's Theorem 1022: every monovalued reloid is metamonovalued
+    (in every codomain universe `w`). -/
 theorem monovalued_is_metamonovalued {A : Type u} {B : Type v} {f : Reloid A B}
-    (hf : Monovalued f) : Metamonovalued f := by
-  rcases hf with ⟨R, hRf, hRmono⟩
-  intro C G ⟨g₀, hg₀⟩
+    (hf : Monovalued f) : Metamonovalued.{u, v, w} f := by
+  let ⟨R, hRf, hRmono⟩ := hf
+  intro C G hGne
+  let ⟨g₀, hg₀⟩ := hGne
   apply le_antisymm
   · apply le_sInf
-    rintro k ⟨g, hg, rfl⟩
+    intro k hk
+    let ⟨g, hg, hkeq⟩ := hk
+    rw [hkeq]
     exact comp_mono (sInf_le hg) (le_refl f)
-  · rintro W ⟨R₁, S, hR₁, hS, hW⟩
+  · intro W hW
+    let ⟨R₁, S, hR₁, hS, hWsub⟩ := hW
     let R₀ : A × B → Prop := fun p => R p ∧ R₁ p
     have hR₀f : f.sets R₀ := f.inter_mem hRf hR₁
     have hR₀mono : RelMonovalued R₀ := fun x y₁ y₂ h₁ h₂ => hRmono x y₁ y₂ h₁.1 h₂.1
@@ -262,19 +401,33 @@ theorem monovalued_is_metamonovalued {A : Type u} {B : Type v} {f : Reloid A B}
         exact GenSets.of ⟨g₀, hg₀, rfl⟩ ⟨R₀, fun _ => True, hR₀f, g₀.univ_mem, fun _ hp => hp⟩
       | inter _ _ ih₁ ih₂ =>
         refine GenSets.mono ?_ (GenSets.inter ih₁ ih₂)
-        rintro ⟨x, z⟩ ⟨⟨y₁, hr₁, hs₁⟩, ⟨y₂, hr₂, hs₂⟩⟩
-        have hy : y₁ = y₂ := hR₀mono x y₁ y₂ hr₁ hr₂
-        subst hy
-        exact ⟨y₁, hr₁, hs₁, hs₂⟩
+        intro p hp
+        cases p with
+        | mk x z =>
+          let ⟨h₁, h₂⟩ := hp
+          let ⟨y₁, hr₁, hs₁⟩ := h₁
+          let ⟨y₂, hr₂, hs₂⟩ := h₂
+          have hy : y₁ = y₂ := hR₀mono x y₁ y₂ hr₁ hr₂
+          rw [← hy] at hs₂
+          exact ⟨y₁, hr₁, ⟨hs₁, hs₂⟩⟩
       | mono hsub _ ih =>
         refine GenSets.mono ?_ ih
-        rintro ⟨x, z⟩ ⟨y, hr, hs⟩
-        exact ⟨y, hr, hsub (y, z) hs⟩
-    exact GenSets.mono (fun p ⟨y, ⟨_, hr₁⟩, hs⟩ => hW p ⟨y, hr₁, hs⟩) (hGen hS)
+        intro p hp
+        cases p with
+        | mk x z =>
+          let ⟨y, hr, hs⟩ := hp
+          exact ⟨y, hr, hsub (y, z) hs⟩
+    exact GenSets.mono (fun p hp =>
+      let ⟨y, hr, hs⟩ := hp
+      hWsub p ⟨y, hr.2, hs⟩) (hGen hS)
+
+theorem unrestricted_imp_metamonovalued {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : UnrestrictedMetamonovalued.{u, v, w} f) : Metamonovalued.{u, v, w} f :=
+  fun C G _ => hf C G
 
 /-- Every metamonovalued reloid is weakly metamonovalued. -/
 theorem metamonovalued_imp_weakly {A : Type u} {B : Type v} {f : Reloid A B}
-    (hf : Metamonovalued f) : WeaklyMetamonovalued f := by
+    (hf : Metamonovalued.{u, v, w} f) : WeaklyMetamonovalued.{u, v, w} f := by
   intro C g h
   have hG : comp (sInf (fun k => k = g ∨ k = h)) f =
       sInf (fun k => ∃ m, (m = g ∨ m = h) ∧ k = comp m f) :=
@@ -284,78 +437,208 @@ theorem metamonovalued_imp_weakly {A : Type u} {B : Type v} {f : Reloid A B}
     apply le_antisymm
     · exact le_inf (sInf_le ⟨g, Or.inl rfl, rfl⟩) (sInf_le ⟨h, Or.inr rfl, rfl⟩)
     · apply le_sInf
-      rintro k ⟨m, rfl | rfl, rfl⟩
-      · exact inf_le_left _ _
-      · exact inf_le_right _ _
+      intro k hk
+      let ⟨m, hm, hkeq⟩ := hk
+      cases hm with
+      | inl hmg =>
+        rw [hkeq, hmg]
+        exact inf_le_left _ _
+      | inr hmh =>
+        rw [hkeq, hmh]
+        exact inf_le_right _ _
   exact hG.trans hRhs
 
-private theorem diag_inf_antiDiag_sets_false (B : Type v) :
-    (principal (diag B) ⊓ principal (antiDiag B)).sets (fun _ => False) :=
-  ⟨diag B, antiDiag B, fun _ hp => hp, fun _ hp => hp, fun _ ⟨heq, hne⟩ => hne heq⟩
+theorem weakly_imp_proper_weakly {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : WeaklyMetamonovalued.{u, v, w} f) : ProperWeaklyMetamonovalued.{u, v, w} f :=
+  fun C g h _ _ => hf C g h
 
-private theorem monovalued_of_diag_antiDiag_eq {A : Type u} {B : Type v} {f : Reloid A B}
-    (heq : comp (principal (diag B) ⊓ principal (antiDiag B)) f =
-      comp (principal (diag B)) f ⊓ comp (principal (antiDiag B)) f) :
-    Monovalued f := by
-  have hbot : (comp (principal (diag B) ⊓ principal (antiDiag B)) f).sets (fun _ => False) :=
-    ⟨fun _ => True, fun _ => False, f.univ_mem, diag_inf_antiDiag_sets_false B,
-      fun _ ⟨_, _, hf⟩ => hf⟩
+theorem proper_weakly_imp_proper_meet {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : ProperWeaklyMetamonovalued.{u, v, w} f) : ProperMeetWeaklyMetamonovalued.{u, v, w} f := by
+  intro C g h hgh
+  have hg : g ≠ ⊥ := by
+    intro hbot
+    apply hgh
+    apply le_antisymm _ (bot_le _)
+    rw [← hbot]
+    exact inf_le_left g h
+  have hh : h ≠ ⊥ := by
+    intro hbot
+    apply hgh
+    apply le_antisymm _ (bot_le _)
+    rw [← hbot]
+    exact inf_le_right g h
+  exact hf C g h hg hh
+
+theorem weakly_imp_principal_endo {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : WeaklyMetamonovalued.{u, v, v} f) : PrincipalEndoWeaklyMetamonovalued f :=
+  fun R S => hf B (principal R) (principal S)
+
+/-- Constructive core lemma: for any injection `ι : B → C`, preserving the meet of
+    the graph of `ι` and its complement yields `MonovaluedDN f`. -/
+private theorem monovaluedDN_of_inj_eq {A : Type u} {B : Type v} {C : Type w}
+    {f : Reloid A B} (ι : B → C) (hι : ∀ y₁ y₂, ι y₁ = ι y₂ → y₁ = y₂)
+    (heq : comp (principal (fun q : B × C => ι q.1 = q.2) ⊓
+                 principal (fun q : B × C => ι q.1 ≠ q.2)) f =
+           comp (principal (fun q : B × C => ι q.1 = q.2)) f ⊓
+           comp (principal (fun q : B × C => ι q.1 ≠ q.2)) f) :
+    MonovaluedDN f := by
+  have hdisj : (principal (fun q : B × C => ι q.1 = q.2) ⊓
+                principal (fun q : B × C => ι q.1 ≠ q.2)).sets (fun _ => False) :=
+    ⟨fun q => ι q.1 = q.2, fun q => ι q.1 ≠ q.2,
+      fun _ hp => hp, fun _ hp => hp, fun _ hp => hp.2 hp.1⟩
+  have hbot : (comp (principal (fun q : B × C => ι q.1 = q.2) ⊓
+                     principal (fun q : B × C => ι q.1 ≠ q.2)) f).sets (fun _ => False) :=
+    ⟨fun _ => True, fun _ => False, f.univ_mem, hdisj,
+      fun _ hp => let ⟨_, _, hf⟩ := hp; hf⟩
   rw [heq] at hbot
-  rcases hbot with ⟨U, V, ⟨R₁, S₁, hR₁, hS₁, hU⟩, ⟨R₂, S₂, hR₂, hS₂, hV⟩, hUV⟩
+  let ⟨U, V, hUcomp, hVcomp, hUV⟩ := hbot
+  let ⟨R₁, S₁, hR₁, hS₁, hU⟩ := hUcomp
+  let ⟨R₂, S₂, hR₂, hS₂, hV⟩ := hVcomp
   refine ⟨fun p => R₁ p ∧ R₂ p, f.inter_mem hR₁ hR₂, ?_⟩
-  intro x y₁ y₂ ⟨_, h₁₂⟩ ⟨h₂₁, _⟩
-  apply Classical.byContradiction
-  intro hne
-  have hv : V (x, y₂) := hV (x, y₂) ⟨y₁, h₁₂, hS₂ (y₁, y₂) hne⟩
-  have hu : U (x, y₂) := hU (x, y₂) ⟨y₂, h₂₁, hS₁ (y₂, y₂) rfl⟩
-  exact hUV (x, y₂) ⟨hu, hv⟩
+  intro x y₁ y₂ h₁ h₂ hne
+  have hιne : ι y₁ ≠ ι y₂ := fun h => hne (hι y₁ y₂ h)
+  have hu : U (x, ι y₂) := hU (x, ι y₂) ⟨y₂, h₂.1, hS₁ (y₂, ι y₂) rfl⟩
+  have hv : V (x, ι y₂) := hV (x, ι y₂) ⟨y₁, h₁.2, hS₂ (y₁, ι y₂) hιne⟩
+  exact hUV (x, ι y₂) ⟨hu, hv⟩
 
-/-- Every weakly metamonovalued reloid is monovalued. -/
+/-- Sharper corollary: preserving binary meets of principal endoreloids on `B`
+    already implies `Monovalued f`. -/
+theorem principal_endo_weakly_metamonovalued_is_monovalued {A : Type u} {B : Type v}
+    {f : Reloid A B} (hf : PrincipalEndoWeaklyMetamonovalued f) : Monovalued f :=
+  monovalued_of_monovaluedDN
+    (monovaluedDN_of_inj_eq id (fun _ _ h => h) (hf (diag B) (antiDiag B)))
+
+/-- Every weakly metamonovalued reloid (at any codomain universe `≥ v`) is monovalued. -/
 theorem weakly_metamonovalued_is_monovalued {A : Type u} {B : Type v} {f : Reloid A B}
-    (hf : WeaklyMetamonovalued f) : Monovalued f :=
-  monovalued_of_diag_antiDiag_eq (hf B (principal (diag B)) (principal (antiDiag B)))
+    (hf : WeaklyMetamonovalued.{u, v, max v w} f) : Monovalued f :=
+  monovalued_of_monovaluedDN
+    (monovaluedDN_of_inj_eq ULift.up.{w} (fun _ _ h => congrArg ULift.down h)
+      (hf (ULift.{w} B)
+        (principal fun q => ULift.up q.1 = q.2)
+        (principal fun q => ULift.up q.1 ≠ q.2)))
 
 /-- OPG-57403: Every metamonovalued reloid is monovalued. -/
 theorem metamonovalued_is_monovalued {A : Type u} {B : Type v} {f : Reloid A B}
-    (hf : Metamonovalued f) : Monovalued f :=
+    (hf : Metamonovalued.{u, v, max v w} f) : Monovalued f :=
   weakly_metamonovalued_is_monovalued (metamonovalued_imp_weakly hf)
 
-/-- Even if weak metamonovaluedness is restricted to proper (`≠ ⊥`) reloids,
-    every such reloid is monovalued. -/
-theorem proper_weakly_metamonovalued_is_monovalued {A : Type u} {B : Type v} {f : Reloid A B}
-    (hf : ProperWeaklyMetamonovalued f) : Monovalued f := by
-  by_cases hne : ∃ y₁ y₂ : B, y₁ ≠ y₂
-  · rcases hne with ⟨y₁, y₂, hy⟩
-    have hdiag : principal (diag B) ≠ (⊥ : Reloid B B) := by
-      intro hbot
-      have hfalse : (principal (diag B)).sets (fun _ => False) := by
-        rw [hbot]
-        trivial
-      exact hfalse (y₁, y₁) rfl
-    have hanti : principal (antiDiag B) ≠ (⊥ : Reloid B B) := by
-      intro hbot
-      have hfalse : (principal (antiDiag B)).sets (fun _ => False) := by
-        rw [hbot]
-        trivial
-      exact hfalse (y₁, y₂) hy
-    exact monovalued_of_diag_antiDiag_eq
-      (hf B (principal (diag B)) (principal (antiDiag B)) hdiag hanti)
-  · refine ⟨fun _ => True, f.univ_mem, ?_⟩
-    intro _ y₁ y₂ _ _
-    apply Classical.byContradiction
-    intro hy
-    exact hne ⟨y₁, y₂, hy⟩
+/-- OPG-57403 under the unrestricted (possibly empty `G`) reading of metamonovaluedness. -/
+theorem unrestricted_metamonovalued_is_monovalued {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : UnrestrictedMetamonovalued.{u, v, max v w} f) : Monovalued f :=
+  metamonovalued_is_monovalued (unrestricted_imp_metamonovalued hf)
 
-/-- Characterization: a reloid is monovalued iff it is metamonovalued. -/
+/-- Strong proper-reloids variant: even if binary meet preservation is assumed only for
+    pairs whose meet is proper (`g ⊓ h ≠ ⊥`), `f` is still monovalued. -/
+theorem proper_meet_weakly_metamonovalued_is_monovalued {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : ProperMeetWeaklyMetamonovalued.{u, v, max v w} f) : Monovalued f := by
+  cases Classical.em (∃ _ : B, True) with
+  | inr hEmpty =>
+    exact ⟨fun _ => True, f.univ_mem, fun _ y₁ _ _ _ => False.elim (hEmpty ⟨y₁, trivial⟩)⟩
+  | inl hNonempty =>
+    let ⟨b₀, _⟩ := hNonempty
+    let C := Option (ULift.{w} B)
+    let Rg : B × C → Prop := fun q =>
+      match q.2 with
+      | none => True
+      | some z => q.1 = z.down
+    let Rh : B × C → Prop := fun q =>
+      match q.2 with
+      | none => True
+      | some z => q.1 ≠ z.down
+    have hMeetNe : principal Rg ⊓ principal Rh ≠ (⊥ : Reloid B C) := by
+      intro hbot
+      have hfalse : (principal Rg ⊓ principal Rh).sets (fun _ => False) :=
+        (eq_bot_iff _).mp hbot
+      let ⟨U, V, hU, hV, hUV⟩ := hfalse
+      exact hUV (b₀, none) ⟨hU (b₀, none) trivial, hV (b₀, none) trivial⟩
+    have hMeetNone : (principal Rg ⊓ principal Rh).sets (fun q : B × C => q.2 = none) := by
+      refine ⟨Rg, Rh, fun _ hp => hp, fun _ hp => hp, ?_⟩
+      intro q hq
+      cases q with
+      | mk y o =>
+        cases o with
+        | none => rfl
+        | some z => exact False.elim (hq.2 hq.1)
+    have hCompNone : (comp (principal Rg ⊓ principal Rh) f).sets (fun p : A × C => p.2 = none) :=
+      ⟨fun _ => True, fun q => q.2 = none, f.univ_mem, hMeetNone,
+        fun _ hp => let ⟨_, _, hs⟩ := hp; hs⟩
+    rw [hf C (principal Rg) (principal Rh) hMeetNe] at hCompNone
+    let ⟨U, V, hUcomp, hVcomp, hUV⟩ := hCompNone
+    let ⟨R₁, S₁, hR₁, hS₁, hU⟩ := hUcomp
+    let ⟨R₂, S₂, hR₂, hS₂, hV⟩ := hVcomp
+    refine ⟨fun p => R₁ p ∧ R₂ p, f.inter_mem hR₁ hR₂, ?_⟩
+    intro x y₁ y₂ h₁ h₂
+    apply Classical.byContradiction
+    intro hne
+    have hu : U (x, some (ULift.up y₂)) :=
+      hU (x, some (ULift.up y₂)) ⟨y₂, h₂.1, hS₁ (y₂, some (ULift.up y₂)) rfl⟩
+    have hv : V (x, some (ULift.up y₂)) :=
+      hV (x, some (ULift.up y₂)) ⟨y₁, h₁.2, hS₂ (y₁, some (ULift.up y₂)) hne⟩
+    have hnone : some (ULift.up y₂) = (none : Option (ULift.{w} B)) :=
+      hUV (x, some (ULift.up y₂)) ⟨hu, hv⟩
+    cases hnone
+
+/-- Proper-operand variant, derived immediately from the stronger `g ⊓ h ≠ ⊥` version. -/
+theorem proper_weakly_metamonovalued_is_monovalued {A : Type u} {B : Type v} {f : Reloid A B}
+    (hf : ProperWeaklyMetamonovalued.{u, v, max v w} f) : Monovalued f :=
+  proper_meet_weakly_metamonovalued_is_monovalued (proper_weakly_imp_proper_meet hf)
+
+/-- Necessity of nonemptiness in `Metamonovalued`: a proper, non-entire monovalued
+    reloid fails `UnrestrictedMetamonovalued` at `G = ∅`. -/
+theorem exists_proper_monovalued_not_unrestricted_metamonovalued :
+    ∃ f : Reloid Bool Unit,
+      f ≠ ⊥ ∧ Monovalued f ∧ ¬ UnrestrictedMetamonovalued.{0, 0, 0} f := by
+  let f : Reloid Bool Unit := principal (fun p : Bool × Unit => p.1 = true)
+  refine ⟨f, ?_, ?_, ?_⟩
+  · intro hbot
+    have hfalse : f.sets (fun _ => False) := (eq_bot_iff f).mp hbot
+    exact hfalse (true, ()) rfl
+  · refine ⟨fun p => p.1 = true, fun _ h => h, ?_⟩
+    intro _ y₁ y₂ _ _
+    cases y₁
+    cases y₂
+    rfl
+  · intro hunr
+    have heq := hunr Unit (fun _ => False)
+    have hmem : (comp (sInf (fun _ : Reloid Unit Unit => False)) f).sets (fun p => p.1 = true) :=
+      ⟨fun p => p.1 = true, fun _ => True, fun _ h => h, (sInf _).univ_mem,
+        fun _ hp => let ⟨_, hr, _⟩ := hp; hr⟩
+    rw [heq] at hmem
+    have htop : sInf (fun k : Reloid Bool Unit =>
+        ∃ g : Reloid Unit Unit, False ∧ k = comp g f) = (⊤ : Reloid Bool Unit) :=
+      le_antisymm (le_top _) (le_sInf fun _ hk => let ⟨_, hf', _⟩ := hk; False.elim hf')
+    rw [htop] at hmem
+    have hcontra : false = true := hmem (false, ())
+    cases hcontra
+
+/-- Full characterizations for any codomain universe `max v w` (including `v` at `w = 0`). -/
 theorem monovalued_iff_metamonovalued {A : Type u} {B : Type v} (f : Reloid A B) :
-    Monovalued f ↔ Metamonovalued f :=
+    Monovalued f ↔ Metamonovalued.{u, v, max v w} f :=
   ⟨monovalued_is_metamonovalued, metamonovalued_is_monovalued⟩
 
-/-- Characterization: a reloid is monovalued iff it is weakly metamonovalued. -/
 theorem monovalued_iff_weakly_metamonovalued {A : Type u} {B : Type v} (f : Reloid A B) :
-    Monovalued f ↔ WeaklyMetamonovalued f :=
+    Monovalued f ↔ WeaklyMetamonovalued.{u, v, max v w} f :=
   ⟨fun h => metamonovalued_imp_weakly (monovalued_is_metamonovalued h),
     weakly_metamonovalued_is_monovalued⟩
 
+theorem monovalued_iff_proper_weakly_metamonovalued {A : Type u} {B : Type v} (f : Reloid A B) :
+    Monovalued f ↔ ProperWeaklyMetamonovalued.{u, v, max v w} f :=
+  ⟨fun h => weakly_imp_proper_weakly (metamonovalued_imp_weakly (monovalued_is_metamonovalued h)),
+    proper_weakly_metamonovalued_is_monovalued⟩
+
+theorem monovalued_iff_proper_meet_weakly_metamonovalued {A : Type u} {B : Type v}
+    (f : Reloid A B) :
+    Monovalued f ↔ ProperMeetWeaklyMetamonovalued.{u, v, max v w} f :=
+  ⟨fun h => proper_weakly_imp_proper_meet
+      (weakly_imp_proper_weakly (metamonovalued_imp_weakly (monovalued_is_metamonovalued h))),
+    proper_meet_weakly_metamonovalued_is_monovalued⟩
+
+theorem monovalued_iff_principal_endo_weakly_metamonovalued {A : Type u} {B : Type v}
+    (f : Reloid A B) :
+    Monovalued f ↔ PrincipalEndoWeaklyMetamonovalued f :=
+  ⟨fun h => weakly_imp_principal_endo (metamonovalued_imp_weakly (monovalued_is_metamonovalued.{u, v, v} h)),
+    principal_endo_weakly_metamonovalued_is_monovalued⟩
+
+end
 end OPG57403
 end UnsolvedMath

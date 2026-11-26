@@ -3,4 +3,8 @@ import UnsolvedMath.OPG57403
 #print axioms UnsolvedMath.OPG57403.metamonovalued_is_monovalued
 #print axioms UnsolvedMath.OPG57403.weakly_metamonovalued_is_monovalued
 #print axioms UnsolvedMath.OPG57403.proper_weakly_metamonovalued_is_monovalued
+#print axioms UnsolvedMath.OPG57403.proper_meet_weakly_metamonovalued_is_monovalued
+#print axioms UnsolvedMath.OPG57403.principal_endo_weakly_metamonovalued_is_monovalued
+#print axioms UnsolvedMath.OPG57403.unrestricted_metamonovalued_is_monovalued
+#print axioms UnsolvedMath.OPG57403.exists_proper_monovalued_not_unrestricted_metamonovalued
 #print axioms UnsolvedMath.OPG57403.monovalued_iff_metamonovalued
