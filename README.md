@@ -9,7 +9,7 @@ This repository provides a self-contained Lean 4 (`v4.36.0`) formalization using
 
 - [`UnsolvedMath/OPG57403.lean`](UnsolvedMath/OPG57403.lean) — Defines reloids (`Reloid A B` as filters on `A × B`), the filter order (`≤`), `⊥`, `⊤`, `principal`, binary meets (`⊓`), arbitrary meets (`sInf`), scoped notation (`Reloid.Notation`), relational composition (`comp`) and converse (`inv`), monovaluedness (`Monovalued`, constructive `MonovaluedDN`), and metamonovaluedness variants (`Metamonovalued`, `UnrestrictedMetamonovalued`, `WeaklyMetamonovalued`, `ProperWeaklyMetamonovalued`, `ProperMeetWeaklyMetamonovalued`, `PrincipalEndoWeaklyMetamonovalued`).
 - [`UnsolvedMath.lean`](UnsolvedMath.lean) — Root module importing `UnsolvedMath.OPG57403` and checking `#print axioms` on the main theorems.
-- [`OPG57403.tex`](OPG57403.tex) — Compressed LaTeX proof of OPG-57403 matching the formalization.
+- [`OPG57403.tex`](OPG57403.tex) / [`OPG57403.pdf`](OPG57403.pdf) — Compressed LaTeX proof of OPG-57403 and compiled PDF matching the formalization.
 
 ## Main Theorems
 
