@@ -1,0 +1,6 @@
+name = "unsolvedmath-lean"
+version = "0.1.0"
+defaultTargets = ["UnsolvedMath"]
+
+[[lean_lib]]
+name = "UnsolvedMath"

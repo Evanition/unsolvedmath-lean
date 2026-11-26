@@ -1,0 +1,6 @@
+import UnsolvedMath.OPG57403
+
+#print axioms UnsolvedMath.OPG57403.metamonovalued_is_monovalued
+#print axioms UnsolvedMath.OPG57403.weakly_metamonovalued_is_monovalued
+#print axioms UnsolvedMath.OPG57403.proper_weakly_metamonovalued_is_monovalued
+#print axioms UnsolvedMath.OPG57403.monovalued_iff_metamonovalued
